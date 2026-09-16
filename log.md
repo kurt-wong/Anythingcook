@@ -401,3 +401,42 @@ recommend 返回真实 matched：["鸡肉","土豆"] 等
 本轮未发现新的 CRITICAL 或 HIGH 问题。项目处于健康状态。
 
 ---
+
+## 2026-09-17 三个 LOW 级问题修复
+
+### LOW #1：matched 数组含原始噪音
+
+`scoreRecipe` 的 `matched.push(item)` 推入原始 item（如"鸡蛋的用量为"），改为推入归一化形式。
+
+```
+修复前: matched=["鸡蛋的用量为"]
+修复后: matched=["鸡蛋"]
+```
+
+### LOW #2：螺蛳粉走纯调味品分支拿满分
+
+`scoreRecipe` 对 mainStuff 为空的菜谱返回 `score: 1`，改为返回 `score: 0`。
+
+```
+修复前: scoreRecipe(['水'], []) → score=1
+修复后: scoreRecipe(['水'], []) → score=0
+```
+
+### LOW #3：mealPlanner 缺蛋白
+
+三处修复：
+1. `proteinSource` 正则扩展：鸭/鹅/腊肠/腊肉/火腿/蟹/蛤/蚝/鱿鱼
+2. 荤位选取：`meatPool` 过滤掉无蛋白的菜
+3. otherPool 回退：只选有蛋白的菜
+
+```
+修复前: seed=2026 缺蛋白 2/14
+修复后: 5 seeds × 14 餐 = 70/70 全部有蛋白
+```
+
+### 验证
+
+- 单元测试 51/51 通过
+- 端到端 5 seeds 验证 70/70 餐有蛋白
+
+---
