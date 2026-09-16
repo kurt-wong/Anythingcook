@@ -377,13 +377,23 @@
                 {{ mealPlan?.weekStart }} 起 · 点击格子选择菜品
               </p>
             </div>
-            <button
-              @click="saveMealPlan"
-              :disabled="savingPlan"
-              class="btn-primary text-caption apple-interaction"
-            >
-              {{ savingPlan ? '保存中...' : '保存计划' }}
-            </button>
+            <div class="flex gap-sm">
+              <button
+                @click="generatePlan"
+                :disabled="generatingPlan"
+                class="btn-pearl-capsule text-caption apple-interaction"
+                title="根据库存和健康配比自动生成一周食谱"
+              >
+                {{ generatingPlan ? '生成中...' : '🎲 智能生成' }}
+              </button>
+              <button
+                @click="saveMealPlan"
+                :disabled="savingPlan"
+                class="btn-primary text-caption apple-interaction"
+              >
+                {{ savingPlan ? '保存中...' : '保存计划' }}
+              </button>
+            </div>
           </div>
         </section>
 
@@ -550,7 +560,27 @@ const mealPlan = ref(null)
 const planDraft = ref(emptyPlanDays())
 const loadingPlan = ref(false)
 const savingPlan = ref(false)
+const generatingPlan = ref(false)
 const planPicker = ref({ open: false, day: '', meal: '', search: '' })
+
+// 智能生成周计划
+const generatePlan = async () => {
+  try {
+    generatingPlan.value = true
+    const response = await axios.post('/api/meal-plan/generate')
+    if (response.data.success) {
+      const plan = response.data.data
+      mealPlan.value = plan
+      planDraft.value = JSON.parse(JSON.stringify(plan.days))
+      showToast(`已生成本周食谱，库存匹配率 ${plan.summary.stockMatchRate}%`)
+    }
+  } catch (error) {
+    console.error('生成周计划失败:', error)
+    showToast('生成失败，请重试', 'warning')
+  } finally {
+    generatingPlan.value = false
+  }
+}
 
 // 菜谱详情弹窗
 const selectedRecipe = ref(null)

@@ -1,8 +1,8 @@
 /** 图片代理路由：/api/image */
 const express = require('express');
-const { FILES, readJson } = require('../lib/store');
 const { asyncHandler } = require('../lib/respond');
 const { loadImageCache } = require('../lib/imageCache');
+const { loadRecipes } = require('../lib/recipesCache');
 
 const router = express.Router();
 
@@ -24,8 +24,8 @@ router.get('/image', asyncHandler(async (req, res) => {
     decodedName = name;
   }
 
-  // 1. 优先从菜谱数据中查找本地图片
-  const recipes = await readJson(FILES.recipes, []);
+  // 1. 优先从菜谱数据中查找本地图片（内存缓存）
+  const recipes = await loadRecipes();
   const recipe = recipes.find(r => r.name === decodedName);
   if (recipe && recipe.imageUrl) {
     return res.redirect(recipe.imageUrl);

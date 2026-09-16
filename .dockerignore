@@ -12,3 +12,8 @@ frontend/dist
 .idea
 .DS_Store
 Thumbs.db
+# 数据由卷挂载提供，不烘焙进镜像（避免被 mount 遮蔽白白增大体积）
+backend/src/data
+# 部署产物
+amazing-food-deploy
+deploy-package.tar.gz

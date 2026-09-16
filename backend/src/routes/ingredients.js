@@ -2,12 +2,10 @@
 const express = require('express');
 const { FILES, readJson, updateJson } = require('../lib/store');
 const { ok, fail, asyncHandler } = require('../lib/respond');
+const { deductibleKeys } = require('../lib/match');
+const { loadRecipes } = require('../lib/recipesCache');
 
 const router = express.Router();
-
-async function loadRecipes() {
-  return readJson(FILES.recipes, []);
-}
 
 /**
  * 获取所有食材库存
@@ -167,7 +165,7 @@ router.delete('/ingredients', asyncHandler(async (req, res) => {
 }));
 
 /**
- * 做菜：扣减食材库存
+ * 做菜：扣减食材库存（只扣主料，调味品不扣）
  * body: { recipeId: "cook-xxx" }
  * M3：扣到 0 保留键（count:0），食材不会从列表消失
  */
@@ -183,19 +181,19 @@ router.post('/cook', asyncHandler(async (req, res) => {
     return fail(res, 404, '菜谱不存在');
   }
 
-  const stuff = Array.isArray(recipe.stuff) ? recipe.stuff : [];
+  const { isMainIngredient } = require('../lib/match');
   const consumed = [];
   const notFound = [];
 
-  await updateJson(FILES.ingredients, {}, (ingredients) => {
-    for (const item of stuff) {
-      const matchKey = Object.keys(ingredients).find(key =>
-        key.includes(item) || item.includes(key)
-      );
-      if (matchKey && ingredients[matchKey].count > 0) {
-        ingredients[matchKey].count = Math.max(0, ingredients[matchKey].count - 1);
-        consumed.push(matchKey);
-      } else {
+  await updateJson(FILES.ingredients, {}, async (ingredients) => {
+    const keys = await deductibleKeys(recipe.stuff, ingredients);
+    for (const key of keys) {
+      ingredients[key].count = Math.max(0, (ingredients[key].count || 0) - 1);
+      consumed.push(key);
+    }
+    // 未匹配到库存的主料记入 notFound
+    for (const item of (recipe.stuff || [])) {
+      if (await isMainIngredient(item) && !consumed.includes(item)) {
         notFound.push(item);
       }
     }

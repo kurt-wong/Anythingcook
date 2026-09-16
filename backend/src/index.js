@@ -5,6 +5,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const cron = require('node-cron');
 
@@ -17,6 +18,7 @@ const PORT = process.env.PORT || 7777;
 
 // 中间件
 app.use(cors());
+app.use(compression()); // gzip 压缩
 app.use(express.json());
 
 // 静态文件服务（前端构建文件）

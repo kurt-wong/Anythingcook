@@ -68,14 +68,14 @@
     <GuestView
       v-else-if="currentRole === 'guest'"
       :guestName="guestName"
-      @switchRole="currentRole = null"
+      @switchRole="switchRole"
       @showTips="showTips = true"
     />
 
     <!-- 饲养员界面 -->
     <CookView
       v-else-if="currentRole === 'cook'"
-      @switchRole="currentRole = null"
+      @switchRole="switchRole"
       @showTips="showTips = true"
     />
   </div>
@@ -87,12 +87,25 @@ import GuestView from './components/GuestView.vue'
 import CookView from './components/CookView.vue'
 import TipsView from './components/TipsView.vue'
 
-const currentRole = ref(null)
-const guestName = ref('')
+const ROLE_KEY = 'af-role'
+const NAME_KEY = 'af-guest-name'
+
+// 恢复上次选择的角色
+const currentRole = ref(localStorage.getItem(ROLE_KEY) || null)
+const guestName = ref(localStorage.getItem(NAME_KEY) || '')
 const showTips = ref(false)
 
 const selectRole = (role, name = '') => {
   currentRole.value = role
   guestName.value = name
+  localStorage.setItem(ROLE_KEY, role)
+  localStorage.setItem(NAME_KEY, name)
+}
+
+const switchRole = () => {
+  currentRole.value = null
+  guestName.value = ''
+  localStorage.removeItem(ROLE_KEY)
+  localStorage.removeItem(NAME_KEY)
 }
 </script>

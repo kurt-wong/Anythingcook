@@ -1,0 +1,273 @@
+# Amazing Food — 项目进程日志
+
+> 流式追加，只增不删。每条带时间戳。
+
+---
+
+## 2026-09-16 23:45 第一性原理审计
+
+### 系统本质
+
+一个家庭的"今天吃什么"决策与执行系统。核心循环：
+
+```
+菜谱(外部同步) → 食客浏览/点菜 → 订单 → 饲养员做菜 → 扣库存 + 记饮食 → 统计
+                                    ↑
+                              周计划(提前规划)
+```
+
+四个问题决定架构是否合理：
+1. 数据量多大？→ 菜谱 ~1000 道，订单每天 <10 单，饮食日志同量级
+2. 并发多高？→ 家庭 2–5 台设备
+3. 一致性要求？→ 最终一致即可（点了菜几秒后饲养员看到就行）
+4. 可靠性要求？→ 高（每天用，坏了全家没饭吃决策依据）
+
+结论：JSON 文件 + 轮询 + 无鉴权 是正确的最简架构。审计不质疑这四点。
+
+### 逐层审计发现
+
+#### 1. 食材匹配算法 — 存在原理性错误（P1）
+
+`routes/orders.js`、`routes/recipes.js`、`routes/ingredients.js` 三处使用同一模式：
+
+```js
+key.includes(item) || item.includes(key)   // key=库存项, item=菜谱用料
+```
+
+实测复现（本机验证）：
+
+```
+库存 "盐"  vs 用料 "盐酥鸡"  → true  （误命中）
+库存 "盐"  vs 用料 "椒盐"    → true  （误命中）
+库存 "盐酥鸡" vs 用料 "盐"    → true  （误命中）
+```
+
+后果：
+- 完成订单时 "盐酥鸡" 会错误扣减 "盐" 的库存（反向也会）
+- 库存推荐分数虚高（"有盐" 就能匹配所有含"盐"字的菜）
+- 随机推荐 preferStock 同理失真
+
+根因：用字符串包含关系近似"是同一种食材"，但中文食材名是包含关系与语义关系不重合的语言。
+"盐" 是 "盐酥鸡" 的子串，但不是它的原料关系。
+
+正确做法（推荐）：**精确匹配 + 归一化 + 显式别名表**
+1. 精确相等
+2. 归一化后相等（去"的用量为"等后缀、全半角、繁简）
+3. 别名表（`ingredientAlias.json`：`{"西红柿": "番茄", "青椒": "柿子椒"}`）人工维护
+4. 三者都不中 → 视为不同食材
+
+不做模糊包含。宁可漏匹配（提示缺货），不可错匹配（扣错库存更伤）。
+
+#### 2. 饮食日志与份数脱节（P1）
+
+`orders.js` `completeOrderSideEffects`：
+
+```js
+dietLogs.push({
+  ...
+  calories: recipe?.calories || null,   // ← 未乘 quantity
+  // 且记录本身不含 quantity 字段
+})
+```
+
+点 2 份番茄炒蛋：库存按 2 份扣（正确），饮食日志只记 1 条 1 份热量（错误）。
+营养看板长期低估实际摄入。
+
+修正：每条日志写入 `quantity`，`calories = (recipe.calories||0) * quantity`；或按 quantity 展开多条。
+
+#### 3. 前端空态语义混淆（P1）
+
+`GuestView.vue:108`：
+
+```html
+<div v-else-if="filteredRecipes.length === 0">
+  <p>没有找到匹配的菜品</p>
+</div>
+```
+
+三种完全不同的状态共用一个文案：
+- 真的搜索无结果
+- 后端没启动 / 网络断了（fetchRecipes 失败，recipes 恒为空数组）
+- 后端返回空库
+
+食客在后端挂掉时看到"没有找到匹配的菜品"，会以为是菜谱问题而不是服务问题。
+对一个每天要用的家庭应用，这是可用性缺陷。
+
+修正：增加 `error` 状态；`catch` 时置位；空态区分"搜索无结果 / 加载失败 / 库为空"。
+
+#### 4. 917 张图片无懒加载（P1）
+
+`GuestView.vue` 九宫格：
+
+```html
+<img :src="getImageUrl(recipe)" ... />
+```
+
+无 `loading="lazy"`。一次渲染 917 个 `<img>`，手机端首屏会请求大量图片。
+本地图在 NAS 上单张不大，但 917 个请求对手机 CPU/内存/电量都是浪费。
+
+修正：`loading="lazy"` 一个属性，零成本。配合分页或虚拟滚动可进一步优化，但 lazy 先解决主要矛盾。
+
+#### 5. recipes.json 每请求全盘读取（P2）
+
+统计：`readJson(FILES.recipes)` 在 routes/lib 中出现 19 处调用点。
+每个请求都 `fs.readJson` 1007K 文件并 JSON.parse 出 ~476K 载荷。
+
+在 i7 上 ~10ms，NAS 上可能 30–50ms。家庭并发下不是瓶颈，但是纯粹浪费——菜谱一天才变一次。
+
+修正：内存缓存 + mtime 失效。
+```js
+let cache = null, cacheMtime = 0;
+async function loadRecipes() {
+  const mtime = (await fs.stat(RECIPES_FILE)).mtimeMs;
+  if (cache && mtime === cacheMtime) return cache;
+  cache = await fs.readJson(RECIPES_FILE);
+  cacheMtime = mtime;
+  return cache;
+}
+```
+sync 脚本写文件后 mtime 变化自动失效，不需要额外失效逻辑。
+
+#### 6. 无响应压缩（P2）
+
+未装 `compression` 中间件。476K 的 JSON 在 WiFi 上明文传输。
+gzip 后约 80–120K，节省 4–5 倍。两行改动（`npm i compression` + `app.use(compression())`）。
+
+#### 7. 角色与购物车不持久化（P2）
+
+`App.vue` 的 `currentRole`/`guestName` 和 `GuestView` 的 `cartItems` 都是纯内存 ref。
+刷新页面全部丢失。家庭成员在自己手机上几乎固定是同一角色，每次都要重新选是反人性的。
+
+修正：`localStorage` 持久化。选菜中途刷新也不丢。10 行以内。
+
+#### 8. scripts/ 死代码约 1500 行（P3）
+
+`backend/src/scripts/` 共 3155 行，其中明显是一次性迭代产物、已完成使命的：
+
+| 文件 | 行数 | 判断 |
+|------|------|------|
+| cleanIngredients.js | 304 | 清洗已跑完 |
+| deepCleanIngredients.js | 310 | 同上第二轮 |
+| cleanIngredientNames.js | 47 | 同上 |
+| cleanupStuff.js | 153 | 同上 |
+| debugNames.js | 26 | 调试残留 |
+| classifyIngredients.js | 278 | 分类已产出 ingredientCategoryMap.json |
+| generateSvgPlaceholders.js | 149 | 占位图已生成 |
+| downloadUnsplashImages.js | 258 | 已被 imageCache.js 取代 |
+| runDownloadCached.js | 162 | 同上 |
+| syncImagesFromGit.js | 243 | 图片已就位 |
+| syncImagesFromWebsite.js | 175 | 同上 |
+
+保留的只有：syncRecipes.js、importFromHowToCook.js、fetchTips.js、fetchData.js。
+死代码的代价不是运行时，而是认知负担：下次读代码的人分不清哪些还活着。
+
+建议：移到 `scripts/archive/` 或直接删除（git 历史里有）。
+
+#### 9. Docker 镜像烘焙数据被挂载遮蔽（P3）
+
+`Dockerfile.nas`：`COPY backend/ ./backend/` 把 1474 张图 + 1MB recipes 烘进镜像。
+`docker-compose.nas.yml`：又把 `./backend/src/data` 挂载上去。
+
+结果：镜像里那份数据永远不可见（被 mount 遮蔽），白白增大镜像体积和构建上下文传输。
+NAS 部署实际用的是 tar 包里宿主机那份数据。
+
+修正：`.dockerignore` 加 `backend/src/data`。镜像只含代码，数据由卷提供。
+（需确认：全新部署时数据从哪来？目前 deploy-package 会带上 data，所以没问题。）
+
+#### 10. CookView 934 行接近上限（P3）
+
+三个 tab（订单/库存/周计划）挤在一个组件。未超 1000 行红线，但已到 93%。
+按 coding-style 规范（推荐 200–500），建议下次触碰时拆成 OrdersTab / InventoryTab / PlanTab。
+现在不动——YAGNI，且拆分有回归风险，收益是可读性不是正确性。
+
+### 审计结论
+
+架构判断全部维持（JSON 存储 / 轮询 / 无鉴权 / Express+Vue）。
+真正的债在**算法正确性**（食材匹配）和**前端体验细节**（空态、懒加载、持久化），
+不在架构。这些都可以在现有结构内修复，不需要重构。
+
+建议处理顺序：
+1. 食材精确匹配（含别名表）— 唯一影响数据正确性的
+2. 饮食日志 quantity/热量
+3. 前端空态区分 + lazy loading + localStorage
+4. recipes 内存缓存 + compression
+5. 清理 scripts 死代码 + dockerignore
+
+---
+
+## 2026-09-17 调研后修复 + 周食谱生成
+
+### 调研结论
+
+调研了四个 GitHub 项目：
+
+- **HowToCook**：菜谱模板有严格的原料格式（`咖喱块 115g`），明确禁止"适量"。导入时丢失了每份用量，这是模糊匹配问题的根源
+- **CookLikeHOC**：把配料（盐、油、酱油）与主料（肉、菜、蛋）分池。直接启发了调味品分池方案
+- **CookHero**：重型 AI 平台，不借鉴架构。产品思路"周计划一键转饮食记录"值得后续考虑
+- **cook**：已是数据源，无新可借鉴点
+
+### 实施记录
+
+**A. 食材精确匹配 + 调味品分池**
+
+新建 `lib/match.js`（133 行）：
+- `normalizeIngredient()`：去空格、去"的用量为"、去括号注释
+- `findIngredientMatch()`：精确 → 归一化 → 别名（双向），废弃 `key.includes(item)`
+- `isMainIngredient()`：基于 ingredientCategoryMap 六大主料分类，不在其中的视为调味品
+- `scoreRecipe()`：只用主料算匹配度，调味品不参与
+- `deductibleKeys()`：只返回可扣的主料键
+
+新建 `data/ingredientAlias.json`：25 组别名（西红柿↔番茄、马铃薯↔土豆等）
+
+三处路由替换：
+- `routes/recipes.js`：recommend 用 `scoreRecipe`，preferStock 同理
+- `routes/orders.js`：completeOrderSideEffects 用 `deductibleKeys`，只扣主料
+- `routes/ingredients.js`：cook 端点同理
+
+**B. 饮食日志 quantity 折算**
+
+`orders.js`：每条日志写入 `quantity`，`calories = recipe.calories * quantity`
+
+**C. 前端修复**
+
+GuestView.vue：
+- 空态三分：`loadError`（可重试）/ 库为空（提示同步）/ 搜索无结果（可清除筛选）
+- `loading="lazy"` 加到九宫格图片
+- 购物车 localStorage 持久化（`af-cart`），`addToCart`/`updateQuantity` 变动时保存
+
+App.vue：
+- 角色/食客名 localStorage 持久化（`af-role`/`af-guest-name`）
+- 新增 `switchRole()` 函数，切换角色时清除持久化
+
+**D. 性能**
+
+`lib/recipesCache.js`：内存缓存 + `fs.stat` mtime 失效，替换 recipes.js/orders.js/ingredients.js/images.js 四处的 `readJson(FILES.recipes)`
+
+`compression` 中间件加入 index.js
+
+**E. 周食谱智能生成（新功能）**
+
+`lib/mealPlanner.js`（187 行）算法：
+1. 按 category/tags 分六池：早餐/荤/素/主食/汤/加餐
+2. 每道菜用 `scoreRecipe` 打库存匹配分
+3. 按匹配度加权随机选取（mulberry32 可复现 RNG）
+4. 午/晚餐：荤（避开昨天同蛋白）+ 素 + 主食(60%) + 汤(30%)
+5. 整周不重复；蛋白来源轮换（鸡/猪/牛/羊/水产）
+6. 无库存时回退到均匀随机，仍保证荤素搭配
+
+`POST /api/meal-plan/generate` 返回 `{weekStart, days, summary}`，不自动保存
+
+CookView 周计划 tab 加"🎲 智能生成"按钮，调用后填充 planDraft，用户可手动调整再保存
+
+冒烟验证：48 道菜无重复，每天早餐 1 + 午餐 2–3 + 晚餐 2–3 + 加餐 0–1，库存匹配率 79%
+
+### 测试
+
+51/51 通过。新增 match.test.js 23 用例，含"盐不匹配盐酥鸡"回归、调味品分池、别名匹配、deductibleKeys。
+
+### 待做
+
+- P3：scripts/ 死代码归档、.dockerignore 补 backend/src/data
+- 推送 GitHub
+
+---

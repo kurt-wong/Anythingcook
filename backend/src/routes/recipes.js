@@ -2,19 +2,13 @@
 const express = require('express');
 const { FILES, readJson } = require('../lib/store');
 const { ok, fail, asyncHandler, parseIntClamped, arr } = require('../lib/respond');
+const { scoreRecipe } = require('../lib/match');
+const { loadRecipes } = require('../lib/recipesCache');
 
 const router = express.Router();
 
-async function loadRecipes() {
-  return readJson(FILES.recipes, []);
-}
 async function getLastUpdated() {
   return readJson(FILES.lastUpdated, null);
-}
-
-/** 双向模糊匹配库存食材与菜谱用料 */
-function fuzzyMatch(available, item) {
-  return available.some(name => name.includes(item) || item.includes(name));
 }
 
 /**
@@ -79,9 +73,11 @@ router.get('/recipes/random', asyncHandler(async (req, res) => {
       name => ingredients[name].count > 0
     );
     if (available.length > 0) {
-      const cookable = filtered.filter(r =>
-        arr(r.stuff).some(s => fuzzyMatch(available, s))
-      );
+      const cookable = [];
+      for (const r of filtered) {
+        const { score } = await scoreRecipe(r.stuff, available);
+        if (score > 0) cookable.push(r);
+      }
       if (cookable.length > 0) filtered = cookable;
     }
   }
@@ -98,7 +94,7 @@ router.get('/recipes/random', asyncHandler(async (req, res) => {
 }));
 
 /**
- * 根据食材库存推荐菜谱
+ * 根据食材库存推荐菜谱（只算主料，调味品不参与评分）
  * query: count=5
  */
 router.get('/recipes/recommend', asyncHandler(async (req, res) => {
@@ -113,16 +109,15 @@ router.get('/recipes/recommend', asyncHandler(async (req, res) => {
     return ok(res, { data: [], message: '请先添加食材库存' });
   }
 
-  const scored = recipes.map(recipe => {
-    const stuff = arr(recipe.stuff);
-    const matched = stuff.filter(s => fuzzyMatch(available, s));
-    const missing = stuff.filter(s => !fuzzyMatch(available, s));
-    const score = stuff.length > 0 ? matched.length / stuff.length : 0;
-    return { ...recipe, matched, missing, score };
-  });
+  const scored = [];
+  for (const recipe of recipes) {
+    const { matched, missing, score } = await scoreRecipe(recipe.stuff, available);
+    if (score > 0) {
+      scored.push({ ...recipe, matched, missing, score });
+    }
+  }
 
   const recommended = scored
-    .filter(r => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, count);
 
@@ -169,4 +164,3 @@ router.get('/tools', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
-module.exports.fuzzyMatch = fuzzyMatch;

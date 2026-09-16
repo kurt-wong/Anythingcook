@@ -105,8 +105,20 @@
             <p class="font-body text-body text-ink-muted-80">正在加载菜谱...</p>
           </div>
 
+          <div v-else-if="loadError" class="text-center py-xxl">
+            <p class="font-body text-body text-red-500 mb-sm">无法连接服务器</p>
+            <p class="font-body text-caption text-ink-muted-48 mb-md">请检查后端是否已启动</p>
+            <button @click="retryFetch" class="btn-pearl-capsule text-caption apple-interaction">重试</button>
+          </div>
+
+          <div v-else-if="recipes.length === 0" class="text-center py-xxl">
+            <p class="font-body text-body text-ink-muted-80">菜谱库为空</p>
+            <p class="font-body text-caption text-ink-muted-48">请先运行数据同步脚本导入菜谱</p>
+          </div>
+
           <div v-else-if="filteredRecipes.length === 0" class="text-center py-xxl">
             <p class="font-body text-body text-ink-muted-80">没有找到匹配的菜品</p>
+            <button @click="searchQuery = ''; selectedCategory = ''" class="btn-pearl-capsule text-caption apple-interaction mt-md">清除筛选</button>
           </div>
 
           <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-md">
@@ -121,6 +133,7 @@
                 <img
                   :src="getImageUrl(recipe)"
                   :alt="recipe.name"
+                  loading="lazy"
                   class="w-full h-full object-cover"
                   @error="handleImageError"
                 />
@@ -280,6 +293,7 @@ const recipes = ref([])
 const recommendations = ref([])
 const cartItems = ref([])
 const loading = ref(false)
+const loadError = ref(false)
 const submitting = ref(false)
 const searchQuery = ref('')
 const showCart = ref(false)
@@ -287,6 +301,18 @@ const selectedRecipe = ref(null)
 const selectedCategory = ref('')
 const isRandomMode = ref(false)
 const mealPlan = ref(null)
+
+// localStorage 持久化购物车
+const CART_KEY = 'af-cart'
+const saveCart = () => {
+  try { localStorage.setItem(CART_KEY, JSON.stringify(cartItems.value)) } catch (_) {}
+}
+const restoreCart = () => {
+  try {
+    const raw = localStorage.getItem(CART_KEY)
+    if (raw) cartItems.value = JSON.parse(raw)
+  } catch (_) {}
+}
 
 // Toast
 const toast = ref({ show: false, message: '', type: 'success' })
@@ -420,13 +446,21 @@ const getRecipeScore = (recipeId) => {
 const fetchRecipes = async () => {
   try {
     loading.value = true
+    loadError.value = false
     const response = await axios.get('/api/recipes')
     if (response.data.success) recipes.value = response.data.data
   } catch (error) {
     console.error('获取菜谱失败:', error)
+    loadError.value = true
   } finally {
     loading.value = false
   }
+}
+
+const retryFetch = () => {
+  fetchRecipes()
+  fetchRecommendations()
+  fetchMealPlan()
 }
 
 // 获取推荐
@@ -451,6 +485,7 @@ const addToCart = (recipe, silent = false) => {
       quantity: 1
     })
   }
+  saveCart()
   if (!silent) showToast(`已添加「${recipe.name}」`)
 }
 
@@ -462,6 +497,7 @@ const updateQuantity = (recipeId, delta) => {
     if (item.quantity <= 0) {
       cartItems.value = cartItems.value.filter(i => i.recipeId !== recipeId)
     }
+    saveCart()
   }
 }
 
@@ -507,6 +543,7 @@ const fetchMealPlan = async () => {
 }
 
 onMounted(() => {
+  restoreCart()
   fetchRecipes()
   fetchRecommendations()
   fetchMealPlan()

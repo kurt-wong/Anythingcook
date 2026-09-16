@@ -1,0 +1,110 @@
+# Amazing Food — 项目状态
+
+> 快照式状态文档。每次状态变更在文末按时间戳追加，不删除历史。
+
+## 2026-09-16 对抗性审查后 + 第一性原理审计快照
+
+### 定位
+
+家庭局域网点菜系统。两个角色：食客（浏览/点菜）、饲养员（接单/库存/周计划）。数据用 JSON 文件存储，零数据库依赖，部署到群晖 NAS。
+
+### 代码规模
+
+| 部分 | 行数 | 说明 |
+|------|------|------|
+| backend/src/index.js | 94 | 装配入口 |
+| backend/src/lib/ (4 文件) | 394 | dates / store / respond / imageCache |
+| backend/src/routes/ (9 文件) | 999 | 全部 API |
+| backend 后端合计 | 1487 | 拆分前为单文件 1637 行 |
+| backend/src/scripts/ | 3155 | 一次性数据脚本（约半数已成死代码） |
+| frontend/src/ | 2304 | 4 组件 + 样式 |
+| 单元测试 | 3 个文件 / 28 用例 | dates、store、orders 校验 |
+
+### 数据
+
+| 文件 | 大小 | 性质 |
+|------|------|------|
+| recipes.json | 1007K（有效载荷约 476K） | 只读为主，每日 cron 同步 |
+| image-cache.json | 153K | 名称→Unsplash URL |
+| ingredients.json | 2.1K | 有状态，频繁读改写 |
+| orders.json / dietLog.json / mealPlan.json | 小 | 有状态 |
+| images/ | 1474 个文件 | 本地图 |
+| tips/ | 18 篇 md | 只读 |
+
+### 已修复（本日对抗性审查）
+
+- HIGH：H1 数据卷挂载路径、H2/H3 时区（weekStart 与饮食日志日期）、H4 订单 quantity 校验
+- MEDIUM：M1 字段空值保护、M2 二次解码、M3 库存归零语义、M4 图片缓存 O(n²)、M5 markdown XSS、M6 维护接口令牌、M7 JSON 写串行锁
+- LOW：L1–L6 全部处理
+- 治理：后端拆分、28 测试、git init、推送至 github.com/kurt-wong/Anythingcook（commit bf43dd8）
+
+### 审计发现的遗留问题（待处理）
+
+按第一性原理审计，详见 log.md 同日条目。优先级：
+
+| 级别 | 问题 |
+|------|------|
+| P1 正确性 | 食材模糊匹配误命中（"盐"匹配"盐酥鸡"） |
+| P1 正确性 | 饮食日志未按 quantity 折算热量/份数 |
+| P1 可用性 | 前端加载失败与"无匹配菜品"共用同一空态 |
+| P1 性能 | 917 张菜谱图无 lazy loading |
+| P2 性能 | recipes.json 每请求全量读盘解析（约 19 处调用点） |
+| P2 性能 | 无 gzip 压缩 |
+| P2 可用性 | 角色/购物车不持久化，刷新即丢 |
+| P3 卫生 | scripts/ 约 1500 行死代码；Docker 镜像烘焙数据被挂载遮蔽 |
+
+### 技术判断（第一性原理结论，维持不变）
+
+- JSON 文件存储：家庭并发 <10、年订单量 <1万，正确选择，不上 SQLite
+- 轮询而非 SSE/WebSocket：LAN 2–3 台设备，正确选择
+- Express + Vue3 SPA：与 Apple 风格交互复杂度匹配，不过度
+- 无鉴权 + ADMIN_TOKEN 护维护接口：家庭 LAN 场景合理
+
+---
+
+## 2026-09-17 调研后修复 + 周食谱生成 完成快照
+
+### 本轮完成
+
+**P1 食材精确匹配（借鉴 HowToCook 精确命名 + CookLikeHOC 配料分池）**
+- 新建 `lib/match.js`：精确 → 归一化 → 别名表，废弃子串包含
+- 新建 `data/ingredientAlias.json`：25 组常见同物异名
+- 调味品分池：不在 ingredientCategoryMap 六大主料分类里的食材不参与推荐评分、不扣库存
+- 回归测试："盐不匹配盐酥鸡"通过
+
+**P1 饮食日志 quantity 折算**
+- 每条日志写入 `quantity` 字段，`calories` 乘以份数
+
+**P1 前端修复**
+- 空态区分三种：加载失败（可重试）/ 库为空 / 搜索无结果
+- 图片 `loading="lazy"`
+- localStorage 持久化角色（`af-role`）、食客名（`af-guest-name`）、购物车（`af-cart`）
+
+**P2 性能**
+- `lib/recipesCache.js`：内存缓存 + mtime 失效，替换全部 19 处读盘点
+- `compression` 中间件
+
+**新功能：周食谱智能生成**
+- `lib/mealPlanner.js`：基于库存匹配度 + 健康配比（荤素搭配、蛋白轮换、整周不重复）
+- `POST /api/meal-plan/generate`：返回 `{weekStart, days, summary}`
+- CookView 周计划 tab 新增"🎲 智能生成"按钮
+- 冒烟验证：48 道菜无重复，库存匹配率 79%（当前库存全为 0 时的基线）
+
+### 测试与构建
+
+- 51/51 单元测试通过（新增 match.js 23 用例）
+- 前端 build 通过
+- 后端加载正常
+
+### 代码规模变化
+
+| 部分 | 上轮 | 本轮 |
+|------|------|------|
+| backend/src/lib/ | 4 文件 / 394 行 | 6 文件 / ~700 行（+match.js +recipesCache.js +mealPlanner.js） |
+| 单元测试 | 28 用例 | 51 用例 |
+| frontend/src/ | 2304 行 | ~2350 行 |
+
+### 待处理
+
+- P3：scripts/ 死代码归档、.dockerignore 补 backend/src/data
+- 推送至 GitHub

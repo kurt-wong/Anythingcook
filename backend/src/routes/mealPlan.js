@@ -4,6 +4,7 @@ const fs = require('fs-extra');
 const { FILES, readJson, writeJson } = require('../lib/store');
 const { ok, fail, asyncHandler } = require('../lib/respond');
 const { getWeekStart } = require('../lib/dates');
+const { generateWeeklyPlan } = require('../lib/mealPlanner');
 
 const router = express.Router();
 
@@ -41,6 +42,20 @@ router.get('/meal-plan', asyncHandler(async (req, res) => {
     }
   }
   return ok(res, { data: emptyWeekPlan(weekStart) });
+}));
+
+/**
+ * 智能生成一周食谱（基于库存 + 健康配比）
+ * body: { seed?: number } 可选随机种子
+ * 返回生成的计划（不自动保存，前端确认后 PUT 保存）
+ */
+router.post('/meal-plan/generate', asyncHandler(async (req, res) => {
+  const { seed } = req.body || {};
+  const plan = await generateWeeklyPlan({ seed });
+  return ok(res, {
+    data: plan,
+    message: `已生成本周食谱，库存匹配率 ${plan.summary.stockMatchRate}%`,
+  });
 }));
 
 /**

@@ -3,6 +3,8 @@ const express = require('express');
 const { FILES, readJson, updateJson } = require('../lib/store');
 const { ok, fail, asyncHandler } = require('../lib/respond');
 const { todayStr, inferMealType } = require('../lib/dates');
+const { deductibleKeys } = require('../lib/match');
+const { loadRecipes } = require('../lib/recipesCache');
 
 const router = express.Router();
 
@@ -10,10 +12,6 @@ const VALID_STATUSES = ['pending', 'cooking', 'completed'];
 const MAX_QUANTITY = 99;
 const MAX_NAME_LEN = 20;
 const MAX_ITEMS = 50;
-
-async function loadRecipes() {
-  return readJson(FILES.recipes, []);
-}
 
 /**
  * 校验并规范化订单入参。返回 { error } 或 { guestName, items }。
@@ -93,25 +91,22 @@ router.get('/orders', asyncHandler(async (req, res) => {
 /**
  * 完成订单时的副作用：扣库存 + 写饮食日志
  * H3：date 用本地日期，mealType 用本地小时
+ * B：calories 乘 quantity；只扣主料（调味品不扣）
  */
 async function completeOrderSideEffects(order) {
   const recipes = await loadRecipes();
 
-  await updateJson(FILES.ingredients, {}, (ingredients) => {
+  await updateJson(FILES.ingredients, {}, async (ingredients) => {
     for (const item of order.items) {
       const recipe = recipes.find(r => r.id === item.recipeId);
       if (!recipe || !Array.isArray(recipe.stuff)) continue;
-      for (const stuff of recipe.stuff) {
-        const matchKey = Object.keys(ingredients).find(key =>
-          key.includes(stuff) || stuff.includes(key)
+      // 只扣主料，调味品视为常备
+      const keys = await deductibleKeys(recipe.stuff, ingredients);
+      for (const key of keys) {
+        ingredients[key].count = Math.max(
+          0,
+          (ingredients[key].count || 0) - (item.quantity || 1)
         );
-        if (matchKey && ingredients[matchKey]) {
-          // M3：归零保留键
-          ingredients[matchKey].count = Math.max(
-            0,
-            (ingredients[matchKey].count || 0) - (item.quantity || 1)
-          );
-        }
       }
     }
     return ingredients;
@@ -124,13 +119,15 @@ async function completeOrderSideEffects(order) {
 
     for (const item of order.items) {
       const recipe = recipes.find(r => r.id === item.recipeId);
+      const qty = item.quantity || 1;
       dietLogs.push({
         id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         date: today,
         mealType,
         recipeId: item.recipeId,
         recipeName: item.name,
-        calories: recipe?.calories || null,
+        quantity: qty, // B：记录份数
+        calories: recipe?.calories ? recipe.calories * qty : null, // B：热量按份数折算
         guestName: order.guestName,
         orderId: order.id,
         source: 'order',
