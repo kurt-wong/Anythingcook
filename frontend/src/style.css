@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Apple设计系统基础样式 */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  
+  body {
+    @apply font-body text-ink bg-canvas;
+    font-feature-settings: "kern" 1;
+    font-kerning: normal;
+  }
+  
+  /* 禁用移动端点击高亮 */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* 平滑滚动 */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Apple设计系统组件 */
+@layer components {
+  /* 主要按钮 - 胶囊形 */
+  .btn-primary {
+    @apply bg-primary text-white font-body text-body rounded-pill;
+    @apply px-lg py-sm transition-all duration-200;
+    @apply hover:bg-primary-focus active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 次要按钮 - 胶囊形幽灵按钮 */
+  .btn-secondary-pill {
+    @apply bg-transparent text-primary font-body text-body rounded-pill;
+    @apply border border-primary px-lg py-sm;
+    @apply transition-all duration-200;
+    @apply hover:bg-primary hover:text-white active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 工具按钮 - 紧凑矩形 */
+  .btn-utility {
+    @apply bg-ink text-body-on-dark font-body text-button-utility rounded-sm;
+    @apply px-md py-xs transition-all duration-200;
+    @apply hover:bg-ink-muted-80 active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 珍珠按钮胶囊 */
+  .btn-pearl-capsule {
+    @apply bg-surface-pearl text-ink-muted-80 font-body text-caption rounded-md;
+    @apply border border-divider-soft px-sm py-xs;
+    @apply transition-all duration-200;
+    @apply hover:bg-hairline active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 商店英雄按钮 */
+  .btn-store-hero {
+    @apply bg-primary text-white font-body text-button-large rounded-pill;
+    @apply px-xl py-md transition-all duration-200;
+    @apply hover:bg-primary-focus active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 圆形图标按钮 */
+  .btn-icon-circular {
+    @apply bg-surface-chip-translucent text-ink rounded-full;
+    @apply w-11 h-11 flex items-center justify-center;
+    @apply transition-all duration-200;
+    @apply hover:bg-opacity-80 active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+  }
+  
+  /* 文本链接 */
+  .text-link {
+    @apply text-primary hover:text-primary-focus transition-colors duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+  }
+  
+  /* 深色背景文本链接 */
+  .text-link-on-dark {
+    @apply text-primary-on-dark hover:text-white transition-colors duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-on-dark focus:ring-offset-2;
+  }
+  
+  /* 产品瓷砖 - 浅色 */
+  .product-tile-light {
+    @apply bg-canvas text-ink;
+    @apply py-section px-lg;
+    @apply text-center;
+  }
+  
+  /* 产品瓷砖 - 灰白色 */
+  .product-tile-parchment {
+    @apply bg-canvas-parchment text-ink;
+    @apply py-section px-lg;
+    @apply text-center;
+  }
+  
+  /* 产品瓷砖 - 深色 */
+  .product-tile-dark {
+    @apply bg-surface-tile-1 text-body-on-dark;
+    @apply py-section px-lg;
+    @apply text-center;
+  }
+  
+  /* 产品瓷砖 - 深色变体2 */
+  .product-tile-dark-2 {
+    @apply bg-surface-tile-2 text-body-on-dark;
+    @apply py-section px-lg;
+    @apply text-center;
+  }
+  
+  /* 产品瓷砖 - 深色变体3 */
+  .product-tile-dark-3 {
+    @apply bg-surface-tile-3 text-body-on-dark;
+    @apply py-section px-lg;
+    @apply text-center;
+  }
+  
+  /* 商店工具卡片 */
+  .store-utility-card {
+    @apply bg-canvas text-ink;
+    @apply border border-hairline rounded-lg;
+    @apply p-lg;
+    @apply transition-shadow duration-300;
+    @apply hover:shadow-soft;
+  }
+  
+  /* 搜索输入框 */
+  .search-input {
+    @apply bg-canvas text-ink font-body text-body;
+    @apply border border-black border-opacity-20 rounded-pill;
+    @apply px-lg py-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2;
+    @apply placeholder:text-ink-muted-48;
+    min-height: 44px;
+  }
+}
+
+/* Apple设计系统动画 */
+@layer utilities {
+  /* 淡入动画 */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* 缓慢旋转动画 */
+  .animate-spin-slow {
+    animation: spin-slow 2s linear infinite;
+  }
+  
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  /* 苹果风格的交互反馈 */
+  .apple-interaction {
+    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  
+  .apple-interaction:active {
+    transform: scale(0.95);
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 640px) {
+  .container {
+    @apply px-lg;
+  }
+  
+  /* 移动端减少垂直间距 */
+  .product-tile-light,
+  .product-tile-parchment,
+  .product-tile-dark,
+  .product-tile-dark-2,
+  .product-tile-dark-3 {
+    @apply py-xxl;
+  }
+}
+
+@media (max-width: 419px) {
+  /* 小手机进一步减少间距 */
+  .product-tile-light,
+  .product-tile-parchment,
+  .product-tile-dark,
+  .product-tile-dark-2,
+  .product-tile-dark-3 {
+    @apply py-xl;
+  }
+}
+
+/* 深色模式支持（可选） */
+@media (prefers-color-scheme: dark) {
+  /* 可以在这里添加深色模式样式 */
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-spin-slow {
+    animation: none;
+  }
+  
+  .apple-interaction {
+    transition: none;
+  }
+}

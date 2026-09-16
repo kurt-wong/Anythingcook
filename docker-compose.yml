@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  amazing-food:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: amazing-food
+    ports:
+      - "7777:7777"
+    volumes:
+      # 数据实际位于 backend/src/data（与代码 DATA_DIR 一致）
+      - ./backend/src/data:/app/backend/src/data
+    environment:
+      - PORT=7777
+      # 可选：Unsplash API Key
+      # - UNSPLASH_ACCESS_KEY=your_key_here
+    restart: unless-stopped

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="format-detection" content="email=no" />
+    <meta name="x5-orientation" content="portrait" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="full-screen" content="yes" />
+    <meta name="browsermode" content="application" />
+    <meta name="x5-page-mode" content="app" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    <title>今天吃什么？ - Amazing Food</title>
+    <meta name="description" content="局域网点餐小应用，帮你解决今天吃什么的难题" />
+    
+    <!-- 预连接字体CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- 字体优化 -->
+    <style>
+      /* 字体加载优化 */
+      @font-face {
+        font-family: 'SF Pro Display';
+        font-weight: 100 900;
+        font-display: swap;
+        src: local('SF Pro Display'), local('-apple-system'), local('BlinkMacSystemFont');
+      }
+      
+      @font-face {
+        font-family: 'SF Pro Text';
+        font-weight: 100 900;
+        font-display: swap;
+        src: local('SF Pro Text'), local('-apple-system'), local('BlinkMacSystemFont');
+      }
+      
+      /* 移动端优化 */
+      html {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      
+      body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+      }
+      
+      /* 安全区域适配 */
+      @supports (padding-top: env(safe-area-inset-top)) {
+        body {
+          padding-top: env(safe-area-inset-top);
+          padding-bottom: env(safe-area-inset-bottom);
+          padding-left: env(safe-area-inset-left);
+          padding-right: env(safe-area-inset-right);
+        }
+      }
+      
+      /* 禁用移动端点击高亮 */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* 平滑滚动 */
+      html {
+        scroll-behavior: smooth;
+      }
+      
+      /* 禁用双击缩放 */
+      * {
+        touch-action: manipulation;
+      }
+      
+      /* 禁用长按菜单 */
+      * {
+        -webkit-touch-callout: none;
+      }
+      
+      /* 输入框优化 */
+      input, textarea, select {
+        font-size: 16px !important;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+      }
+      
+      /* 按钮优化 */
+      button {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        outline: none;
+      }
+      
+      /* 禁用选中 */
+      .no-select {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      
+      /* 允许选中 */
+      .selectable {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+      }
+      
+      /* 滚动条优化 */
+      ::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
+      }
+      
+      /* 横屏适配 */
+      @media (orientation: landscape) {
+        .landscape-hidden {
+          display: none;
+        }
+      }
+      
+      /* 深色模式支持 */
+      @media (prefers-color-scheme: dark) {
+        /* 可以在这里添加深色模式样式 */
+      }
+      
+      /* 减少动画偏好 */
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-white min-h-screen no-select">
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+    
+    <!-- 移动端性能优化 -->
+    <script>
+      // 禁用双击缩放
+      let lastTouchEnd = 0;
+      document.addEventListener('touchend', function (event) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+          event.preventDefault();
+        }
+        lastTouchEnd = now;
+      }, false);
+      
+      // 禁用长按菜单
+      document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+      });
+      
+      // 优化滚动性能
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+      
+      // 移动端视口高度修复
+      function setVH() {
+        let vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+      }
+      
+      setVH();
+      window.addEventListener('resize', setVH);
+      window.addEventListener('orientationchange', setVH);
+    </script>
+  </body>
+</html>

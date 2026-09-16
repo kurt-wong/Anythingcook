@@ -1,0 +1,131 @@
+{
+  "updatedAt": "2026-09-15T15:50:32.179Z",
+  "tips": [
+    {
+      "slug": "厨房准备",
+      "title": "厨房准备",
+      "group": "基础",
+      "groupLabel": "厨房基础",
+      "file": "厨房准备.md"
+    },
+    {
+      "slug": "如何洗碗",
+      "title": "如何洗碗",
+      "group": "基础",
+      "groupLabel": "厨房基础",
+      "file": "如何洗碗.md"
+    },
+    {
+      "slug": "如何选择现在吃什么",
+      "title": "如何决策吃什么",
+      "group": "基础",
+      "groupLabel": "厨房基础",
+      "file": "如何选择现在吃什么.md"
+    },
+    {
+      "slug": "去腥",
+      "title": "去腥",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "去腥.md"
+    },
+    {
+      "slug": "学习凉拌",
+      "title": "凉拌",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习凉拌.md"
+    },
+    {
+      "slug": "学习炒与煎",
+      "title": "炒/煎",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习炒与煎.md"
+    },
+    {
+      "slug": "学习焯水",
+      "title": "焯水",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习焯水.md"
+    },
+    {
+      "slug": "学习煮",
+      "title": "煮",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习煮.md"
+    },
+    {
+      "slug": "学习腌",
+      "title": "腌（肉）",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习腌.md"
+    },
+    {
+      "slug": "学习蒸",
+      "title": "蒸",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "学习蒸.md"
+    },
+    {
+      "slug": "微波炉",
+      "title": "使用微波炉",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "微波炉.md"
+    },
+    {
+      "slug": "空气炸锅",
+      "title": "使用空气炸锅",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "空气炸锅.md"
+    },
+    {
+      "slug": "食品安全",
+      "title": "食品安全",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "食品安全.md"
+    },
+    {
+      "slug": "高压力锅",
+      "title": "蒸（米）/炖（使用电饭煲/高压锅/电压力锅）",
+      "group": "学习",
+      "groupLabel": "技法学习",
+      "file": "高压力锅.md"
+    },
+    {
+      "slug": "油温判断技巧",
+      "title": "油温判断技巧及常见温度和单位换算表",
+      "group": "进阶",
+      "groupLabel": "进阶技巧",
+      "file": "油温判断技巧.md"
+    },
+    {
+      "slug": "糖色的炒制",
+      "title": "糖色的炒制",
+      "group": "进阶",
+      "groupLabel": "进阶技巧",
+      "file": "糖色的炒制.md"
+    },
+    {
+      "slug": "辅料技巧",
+      "title": "辅料技巧",
+      "group": "进阶",
+      "groupLabel": "进阶技巧",
+      "file": "辅料技巧.md"
+    },
+    {
+      "slug": "高级专业术语",
+      "title": "做菜专业术语",
+      "group": "进阶",
+      "groupLabel": "进阶技巧",
+      "file": "高级专业术语.md"
+    }
+  ]
+}
