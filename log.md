@@ -271,3 +271,85 @@ CookView 周计划 tab 加"🎲 智能生成"按钮，调用后填充 planDraft�
 - 推送 GitHub
 
 ---
+
+## 2026-09-17 对抗性审查 + 三 CRITICAL bug 修复
+
+### 审查方法
+
+起服务做端到端实测，每个结论有 curl/脚本输出为证，不靠代码阅读推断。
+
+### 发现的三个 CRITICAL bug
+
+**BUG #1：推荐系统完全失效**
+
+```
+curl /api/recipes/recommend?count=20
+→ 全部 20 条 score=1.00, matched=[]
+```
+
+根因：`isMainIngredient()` 只查 `ingredientCategoryMap.json`（54 个词），而菜谱 stuff 里的食材名（"鸡胸肉"、"花生米"、"干辣椒"）大多不在其中。`scoreRecipe` 对 mainStuff 为空的菜走"纯调味品"分支直接返回 score=1。917 道菜中 326 道的 stuff 完全不含 categoryMap 中的任何词 → 全部获得虚假满分。
+
+**BUG #2：别名匹配在 recommend 中未生效**
+
+```
+库存设置为 番茄(5), 土豆(3)
+curl /api/recipes/recommend?count=50
+→ matched 含"西红柿"的菜: 0
+→ matched 含"土豆"的菜: 0
+```
+
+根因：`isMainIngredient('番茄')` 返回 false（categoryMap 键是"西红柿"不是"番茄"）→ 被当调味品跳过 → `findIngredientMatch` 根本没机会执行。
+
+**BUG #3：周食谱生成荤素搭配约束未生效**
+
+```
+tue dinner: 无,无,无,汤与粥     ← 三道菜 category 都是"无"
+wed lunch:  荤菜,无,主食         ← 无素菜
+14 餐中至少 6 餐缺少真正的素菜
+```
+
+根因：mealPlanner.js 把 576 道无 category 的菜默认归入 vegPool（"宁素不荤"），但它们的 category 是"无"不是"素菜"。
+
+### 审查中排除的误判
+
+| 项 | 结论 | 证据 |
+|---|------|------|
+| 饮食日志 quantity 折算 | 正确 | ASCII recipeId 测试：calories=3580（1790×2）✓ |
+| 调味品不扣库存 | 正确 | 代码逻辑正确；"盐消失"是 shell 编码写入乱码键 |
+| compression gzip | 生效 | 761723 → 201534 字节（3.8×） |
+| 前端空态/lazy/localStorage | 存在 | 构建产物 grep 确认 |
+
+### 修复
+
+**新建 `data/seasonings.json`**：显式调味品白名单（约 100 词：盐/糖/酱油/醋/料酒/蚝油/油/香料/淀粉/水等）。替代"不在 categoryMap 里就是调味品"的反向逻辑。
+
+**重写 `match.js` 的 `isMainIngredient()`**：
+- 旧：在 54 词的 categoryMap 里找 → 95% 食材误判为调味品
+- 新：不在调味品白名单里的都是主料
+- 别名感知：先展开等价形式（自身 + 归一化 + 别名双向），任一形式不在白名单 → 是主料
+
+**修改 `mealPlanner.js`**：
+- 无 category 的菜归入 `otherPool` 而非 `vegPool`
+- `buildMeal` 中 vegPool 取完回退 otherPool
+- summary 加 otherPool 大小
+
+### 修复验证（端到端）
+
+```
+=== BUG #1 ===
+916/917 道菜有主料参与评分（修复前 326 道虚假满分）
+recommend 返回真实 matched：["鸡肉","土豆"] 等
+
+=== BUG #2 ===
+库存"番茄" → 菜谱"西红柿" matched ✓
+库存"土豆" → 菜谱"马铃薯" matched ✓
+
+=== BUG #3 ===
+14/14 餐有素菜（修复前 6 餐缺素）
+43 道午晚餐去重后 43 道 ✓
+
+=== 回归 ===
+51/51 单元测试通过
+```
+
+---

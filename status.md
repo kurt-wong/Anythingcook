@@ -108,3 +108,40 @@
 
 - P3：scripts/ 死代码归档、.dockerignore 补 backend/src/data
 - 推送至 GitHub
+
+---
+
+## 2026-09-17 对抗性审查 + 三 CRITICAL bug 修复
+
+### 对抗性审查结论
+
+对上轮全部任务做了端到端实测（非代码阅读推断），发现 3 个 CRITICAL bug，全部指向同一根因：`isMainIngredient()` 判定范围太窄（只查 54 词的 categoryMap）。
+
+| BUG | 症状 | 根因 |
+|-----|------|------|
+| #1 | recommend 全部 score=1.00 matched=[] | 326/917 道菜的 stuff 不含 categoryMap 任何词 → 走"纯调味品"分支返回满分 |
+| #2 | 别名库存（番茄/土豆）被推荐忽略 | isMainIngredient 不查别名表 → 被当调味品跳过 |
+| #3 | 周食谱 14 餐中 6 餐缺素菜 | 576 道无 category 的菜被默认归入 vegPool |
+
+### 修复方案
+
+1. **新建 `data/seasonings.json`**：显式调味品白名单（约 100 词），替代"不在 categoryMap 里就是调味品"的反向逻辑
+2. **重写 `match.js` 的 `isMainIngredient()`**：不在调味品白名单里的一律是主料；检查别名等价形式
+3. **修改 `mealPlanner.js`**：无 category 的菜归入 `otherPool` 而非 `vegPool`；buildMeal 中 vegPool 取完回退 otherPool
+
+### 修复验证（端到端）
+
+| 验证项 | 结果 |
+|--------|------|
+| recommend 返回真实 matched | ✓ 916/917 道菜有主料参与评分（修复前 326 道虚假满分） |
+| 别名匹配 | ✓ 库存"番茄"匹配菜谱"西红柿"；"土豆"匹配"马铃薯" |
+| 周食谱荤素搭配 | ✓ 14/14 餐有素菜（修复前 6 餐缺素） |
+| 周食谱无重复 | ✓ 43 道午晚餐去重后 43 道 |
+| 单元测试 | 51/51 通过 |
+
+### 非 bug（审查中排除的误判）
+
+- 饮食日志 quantity 折算：代码正确，之前 null 是 shell 编码问题
+- 调味品不扣库存：代码逻辑正确，之前"盐消失"是测试写入乱码键
+- compression gzip：761723 → 201534 字节（3.8×）生效
+- 前端空态/lazy loading/localStorage：构建产物中均存在

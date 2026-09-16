@@ -1,52 +1,48 @@
 /**
- * 食材精确匹配（替代旧的子串模糊匹配）。
+ * 食材精确匹配 + 调味品分池。
  *
- * 旧算法 key.includes(item) 会把 "盐" 误匹配 "盐酥鸡"。
- * 新算法：精确 → 归一化 → 别名表，宁可漏匹配不可错匹配。
+ * 判定逻辑（修复 BUG #1/#2）：
+ *   旧：只在 ingredientCategoryMap 的 54 个词里找 → 95% 的食材被误判为调味品
+ *   新：不在 seasonings.json 白名单里的都是主料（宁可多算主料，不可漏算）
  *
- * 调味品分池：不在 ingredientCategoryMap 六大主料分类里的食材视为调味品，
- * 不参与推荐评分，也不扣减库存（CookLikeHOC 的配料/主料分离思路）。
+ * 别名感知（修复 BUG #2）：
+ *   isMainIngredient 检查别名表，"番茄" 的规范名 "西红柿" 在 categoryMap 中 → 是主料
  */
 const path = require('path');
 const { readJson, FILES } = require('./store');
 
-/** 常见同步残留与格式噪音 */
+// ---------------------------------------------------------------------------
+// 归一化
+// ---------------------------------------------------------------------------
+
 function normalizeIngredient(name) {
   if (!name || typeof name !== 'string') return '';
   return name
     .trim()
-    .replace(/的用量为.*$/, '')   // "食用油的用量为" → "食用油"
-    .replace(/（[^）]*）/g, '')    // 去中文括号注释
-    .replace(/\([^)]*\)/g, '')    // 去英文括号注释
+    .replace(/的用量为.*$/, '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/\([^)]*\)/g, '')
     .replace(/\s+/g, '');
 }
 
-/** 主料分类集合（缓存） */
-let mainIngredientSet = null;
+// ---------------------------------------------------------------------------
+// 调味品白名单（懒加载）
+// ---------------------------------------------------------------------------
 
-async function loadMainIngredients() {
-  if (mainIngredientSet) return mainIngredientSet;
-  const catMap = await readJson(FILES.ingredientCategoryMap, {});
-  mainIngredientSet = new Set();
-  for (const items of Object.values(catMap)) {
-    if (Array.isArray(items)) items.forEach(i => mainIngredientSet.add(i));
-  }
-  return mainIngredientSet;
+let seasoningSet = null;
+
+async function loadSeasonings() {
+  if (seasoningSet) return seasoningSet;
+  const file = path.join(__dirname, '../data/seasonings.json');
+  const data = await readJson(file, { list: [] });
+  seasoningSet = new Set(data.list || []);
+  return seasoningSet;
 }
 
-/** 测试用：重置缓存 */
-function _resetCache() {
-  mainIngredientSet = null;
-}
+// ---------------------------------------------------------------------------
+// 别名表（懒加载）
+// ---------------------------------------------------------------------------
 
-/** 判断是否为主料（在 categoryMap 中）。不在 → 视为调味品 */
-async function isMainIngredient(name) {
-  const set = await loadMainIngredients();
-  const norm = normalizeIngredient(name);
-  return set.has(name) || set.has(norm);
-}
-
-/** 别名表（懒加载） */
 let aliasMap = null;
 
 async function loadAliases() {
@@ -55,6 +51,50 @@ async function loadAliases() {
   aliasMap = await readJson(file, {});
   return aliasMap;
 }
+
+/** 获取 name 的所有等价形式（自身 + 归一化 + 别名双向） */
+async function getEquivalents(name) {
+  const norm = normalizeIngredient(name);
+  const aliases = await loadAliases();
+  const result = new Set([name]);
+  if (norm) result.add(norm);
+
+  // 别名表：name → 规范名
+  const canonical = aliases[name] || aliases[norm];
+  if (canonical) result.add(canonical);
+
+  // 别名表反向：规范名 → name
+  for (const [canon, alts] of Object.entries(aliases)) {
+    if (Array.isArray(alts) && (alts.includes(name) || alts.includes(norm))) {
+      result.add(canon);
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// 主料判定（修复 BUG #1：反转逻辑 + 别名感知）
+// ---------------------------------------------------------------------------
+
+/**
+ * 判断是否为主料。
+ * 规则：不在调味品白名单里的一律是主料。
+ * 别名感知：先展开等价形式，任一形式不在白名单里 → 是主料。
+ */
+async function isMainIngredient(name) {
+  const seasonings = await loadSeasonings();
+  const equivalents = await getEquivalents(name);
+  // 任一等价形式不在调味品白名单 → 视为主料
+  for (const eq of equivalents) {
+    if (!seasonings.has(eq)) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// 库存匹配
+// ---------------------------------------------------------------------------
 
 /**
  * 在 availableKeys 中查找与 itemName 对应的库存键。
@@ -74,23 +114,31 @@ async function findIngredientMatch(availableKeys, itemName) {
     if (normalizeIngredient(key) === normItem) return key;
   }
 
-  // 3. 别名表：itemName 的规范名在库存里
-  const aliases = await loadAliases();
-  const canonical = aliases[itemName] || aliases[normItem];
-  if (canonical && keySet.has(canonical)) return canonical;
+  // 3. 别名：itemName 的等价形式在库存里
+  const equivalents = await getEquivalents(itemName);
+  for (const eq of equivalents) {
+    if (keySet.has(eq)) return eq;
+  }
 
-  // 4. 别名表反向：库存键的别名包含 itemName
-  for (const [canon, alts] of Object.entries(aliases)) {
-    if (Array.isArray(alts) && alts.includes(itemName) && keySet.has(canon)) return canon;
+  // 4. 反向：库存键的等价形式包含 itemName
+  for (const key of keySet) {
+    const keyEquivs = await getEquivalents(key);
+    if (keyEquivs.has(itemName) || (normItem && keyEquivs.has(normItem))) {
+      return key;
+    }
   }
 
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// 评分（只算主料）
+// ---------------------------------------------------------------------------
+
 /**
- * 计算菜谱对当前库存的匹配情况（只算主料）。
- * 返回 { matched: [主料名], missing: [主料名], score: 0-1 }
- * 调味品不参与评分。
+ * 计算菜谱对当前库存的匹配情况。
+ * 调味品不参与评分；所有非调味品的用料都参与。
+ * 返回 { matched, missing, score }
  */
 async function scoreRecipe(recipeStuff, availableKeys) {
   const stuff = Array.isArray(recipeStuff) ? recipeStuff : [];
@@ -99,8 +147,8 @@ async function scoreRecipe(recipeStuff, availableKeys) {
     if (await isMainIngredient(item)) mainStuff.push(item);
   }
 
+  // 全是调味品的菜谱：视为可做
   if (mainStuff.length === 0) {
-    // 纯调味品菜谱（罕见）：视为可做
     return { matched: [], missing: [], score: 1 };
   }
 
@@ -115,22 +163,31 @@ async function scoreRecipe(recipeStuff, availableKeys) {
   return { matched, missing, score: matched.length / mainStuff.length };
 }
 
-/**
- * 扣减库存：返回需要扣减的库存键列表（只含主料）。
- * 调味品不扣。
- */
+// ---------------------------------------------------------------------------
+// 库存扣减（只扣主料）
+// ---------------------------------------------------------------------------
+
 async function deductibleKeys(recipeStuff, ingredients) {
   const stuff = Array.isArray(recipeStuff) ? recipeStuff : [];
   const availableKeys = Object.keys(ingredients);
   const result = [];
   for (const item of stuff) {
-    if (!(await isMainIngredient(item))) continue; // 调味品不扣
+    if (!(await isMainIngredient(item))) continue;
     const hit = await findIngredientMatch(availableKeys, item);
     if (hit && ingredients[hit] && ingredients[hit].count > 0) {
       result.push(hit);
     }
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// 测试辅助
+// ---------------------------------------------------------------------------
+
+function _resetCache() {
+  seasoningSet = null;
+  aliasMap = null;
 }
 
 module.exports = {

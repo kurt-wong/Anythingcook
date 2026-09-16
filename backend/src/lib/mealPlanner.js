@@ -93,6 +93,7 @@ async function generateWeeklyPlan(opts = {}) {
   const staplePool = [];
   const soupPool = [];
   const snackPool = [];
+  const otherPool = []; // 无 category 且无明确 tag 的菜，不默认归素
 
   for (const r of scored) {
     const cat = r.category || '';
@@ -114,17 +115,17 @@ async function generateWeeklyPlan(opts = {}) {
       }
       continue;
     }
-    // 无 category 的菜谱：按 tags 粗分
+    // 无 category 的菜谱：按 tags 粗分，无明确 tag 的归 otherPool
     if (tags.includes('荤菜') || tags.includes('下饭')) meatPool.push(r);
     else if (tags.includes('素菜')) vegPool.push(r);
     else if (tags.includes('主食')) staplePool.push(r);
     else if (tags.includes('汤') || tags.includes('粥')) soupPool.push(r);
-    else vegPool.push(r); // 默认归素，宁素不荤
+    else otherPool.push(r); // BUG #3 修复：不默认归素
   }
 
   // 按匹配度排序（无库存时同分靠名称稳定排序）
   const byScore = (a, b) => b._matchScore - a._matchScore || a.name.localeCompare(b.name, 'zh-CN');
-  [breakfastPool, meatPool, vegPool, staplePool, soupPool, snackPool].forEach(p => p.sort(byScore));
+  [breakfastPool, meatPool, vegPool, staplePool, soupPool, snackPool, otherPool].forEach(p => p.sort(byScore));
 
   // 简单可复现 RNG（mulberry32）
   const seed = opts.seed ?? Date.now();
@@ -165,8 +166,8 @@ async function generateWeeklyPlan(opts = {}) {
       ids.push(meat.id);
       lastProtein[mealType] = proteinSource(meat);
     }
-    // 素
-    const veg = take(vegPool);
+    // 素：优先 vegPool，取完回退 otherPool（BUG #3：不再把 otherPool 当素菜）
+    const veg = take(vegPool) || take(otherPool);
     if (veg) ids.push(veg.id);
     // 主食（60% 概率）
     if (rng() < 0.6) {
@@ -212,6 +213,7 @@ async function generateWeeklyPlan(opts = {}) {
         staple: staplePool.length,
         soup: soupPool.length,
         snack: snackPool.length,
+        other: otherPool.length,
       },
     },
   };
