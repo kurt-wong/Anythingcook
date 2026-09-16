@@ -138,6 +138,8 @@ async function findIngredientMatch(availableKeys, itemName) {
 /**
  * 计算菜谱对当前库存的匹配情况。
  * 调味品不参与评分；所有非调味品的用料都参与。
+ * LOW #1 修复：matched 推入归一化形式，不推原始噪音（如"鸡蛋的用量为"→"鸡蛋"）
+ * LOW #2 修复：无主料的菜谱返回 score=0（如螺蛳粉 stuff=["水"]），不再拿满分
  * 返回 { matched, missing, score }
  */
 async function scoreRecipe(recipeStuff, availableKeys) {
@@ -147,17 +149,17 @@ async function scoreRecipe(recipeStuff, availableKeys) {
     if (await isMainIngredient(item)) mainStuff.push(item);
   }
 
-  // 全是调味品的菜谱：视为可做
+  // 无主料的菜谱：score=0（LOW #2：不再走"纯调味品"分支拿满分）
   if (mainStuff.length === 0) {
-    return { matched: [], missing: [], score: 1 };
+    return { matched: [], missing: [], score: 0 };
   }
 
   const matched = [];
   const missing = [];
   for (const item of mainStuff) {
     const hit = await findIngredientMatch(availableKeys, item);
-    if (hit) matched.push(item);
-    else missing.push(item);
+    if (hit) matched.push(normalizeIngredient(item) || item); // LOW #1：推归一化形式
+    else missing.push(normalizeIngredient(item) || item);
   }
 
   return { matched, missing, score: matched.length / mainStuff.length };

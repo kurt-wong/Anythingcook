@@ -93,9 +93,9 @@ describe('scoreRecipe（只算主料）', () => {
     assert.strictEqual(result.score, 0.5);
   });
 
-  it('纯调味品菜谱视为可做', async () => {
+  it('纯调味品菜谱返回 score=0（LOW #2）', async () => {
     const result = await scoreRecipe(['盐', '糖'], []);
-    assert.strictEqual(result.score, 1);
+    assert.strictEqual(result.score, 0);
   });
 
   it('无主料匹配返回 0', async () => {

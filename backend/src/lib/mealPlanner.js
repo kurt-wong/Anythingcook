@@ -29,11 +29,11 @@ function proteinSource(recipe) {
   const tags = recipe.tags || [];
   if (tags.includes('水产')) return '水产';
   const stuff = recipe.stuff || [];
-  if (stuff.some(s => /鸡/.test(s))) return '鸡';
-  if (stuff.some(s => /猪|五花|里脊|排骨/.test(s))) return '猪';
+  if (stuff.some(s => /鸡|鸭|鹅/.test(s))) return '禽';
+  if (stuff.some(s => /猪|五花|里脊|排骨|腊肠|腊肉|火腿/.test(s))) return '猪';
   if (stuff.some(s => /牛/.test(s))) return '牛';
   if (stuff.some(s => /羊/.test(s))) return '羊';
-  if (stuff.some(s => /虾|鱼|扇贝|龙虾/.test(s))) return '水产';
+  if (stuff.some(s => /虾|鱼|扇贝|龙虾|蟹|蛤|蚝|鱿鱼/.test(s))) return '水产';
   if (cat === '荤菜') return '其他荤';
   return null;
 }
@@ -156,9 +156,10 @@ async function generateWeeklyPlan(opts = {}) {
   /** 组一餐：保证荤+素，有主食/汤则加 */
   const buildMeal = (mealType) => {
     const ids = [];
-    // 荤：避开昨天同蛋白
-    const meatCandidates = meatPool.filter(r => proteinSource(r) !== lastProtein[mealType]);
-    const meat = pickWeighted(meatCandidates.length ? meatCandidates : meatPool, used, rng);
+    // 荤：避开昨天同蛋白，且只选有蛋白的菜（LOW #3）
+    const meatWithProtein = meatPool.filter(r => proteinSource(r) !== null);
+    const meatCandidates = meatWithProtein.filter(r => proteinSource(r) !== lastProtein[mealType]);
+    const meat = pickWeighted(meatCandidates.length ? meatCandidates : meatWithProtein, used, rng);
     if (meat) {
       used.add(meat.id);
       totalPicked++;
@@ -166,8 +167,18 @@ async function generateWeeklyPlan(opts = {}) {
       ids.push(meat.id);
       lastProtein[mealType] = proteinSource(meat);
     }
-    // 素：优先 vegPool，取完回退 otherPool（BUG #3：不再把 otherPool 当素菜）
-    const veg = take(vegPool) || take(otherPool);
+    // 素：优先 vegPool，取完回退 otherPool 中有蛋白的菜（LOW #3）
+    // 不回退到无蛋白的 otherPool 项，避免"素"位选到无蛋白菜导致整餐缺蛋白
+    const veg = take(vegPool) || (() => {
+      const withProtein = otherPool.filter(r => proteinSource(r) !== null);
+      const r = pickWeighted(withProtein, used, rng);
+      if (r) {
+        used.add(r.id);
+        totalPicked++;
+        if (r._matchScore > 0) matchedPicked++;
+      }
+      return r;
+    })();
     if (veg) ids.push(veg.id);
     // 主食（60% 概率）
     if (rng() < 0.6) {
