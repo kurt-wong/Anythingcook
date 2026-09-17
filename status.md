@@ -229,3 +229,55 @@
 - 加菜 API：mon lunch 4→5 道 ✓
 - 删菜 API：mon lunch 5→4 道 ✓
 - 前端 build 通过
+
+---
+
+## 2026-09-17 最终状态快照（重启前）
+
+### 架构
+
+- **双端口**：7777 食客点菜端（guest.html）、9999 饲养员管理端（cook.html）
+- Vite 多页构建，后端 `createApp(entryHtml)` 工厂函数，双 Express 实例共享 API 路由
+- 数据 JSON 文件存储，内存缓存 + mtime 失效
+
+### 功能清单
+
+| 模块 | 功能 |
+|------|------|
+| 食客端 (7777) | 角色选择（大小姐/母上大人）、菜谱九宫格（库存优先排序）、今明食谱面板（三菜一汤、加菜/删菜、库存绿点）、购物车、随机推荐、厨艺小课堂 |
+| 饲养员端 (9999) | 订单管理（状态流转、自动扣库存+写饮食日志）、库存管理（89 种食材 8 分类、点击+1）、周计划（智能生成、手动调整）、下厨统计、营养看板 |
+| 后端 API | 38 个端点（菜谱/订单/库存/周计划/饮食记录/统计/技巧/图片/维护） |
+
+### 食材分类（8 类 89 项）
+
+肉类 13、蔬菜类 28、菌菇类 6、蛋类 3、豆制品 6、主食类 25、水产类 6、水果类 10
+
+### 关键数据文件
+
+| 文件 | 说明 |
+|------|------|
+| `data/ingredientCategoryMap.json` | 8 分类 89 种主料 |
+| `data/seasonings.json` | 调味品白名单（约 120 词） |
+| `data/ingredientAlias.json` | 25 组同物异名 |
+| `data/recipes.json` | 917 道菜谱 |
+| `data/images/` | 1474 张本地图 |
+
+### 测试与质量
+
+- 51/51 单元测试通过（dates/store/orders/match）
+- 两轮对抗性审查，3 CRITICAL + 3 LOW 全部修复
+- 前端 build 通过
+
+### Git 状态
+
+- 仓库：https://github.com/kurt-wong/Anythingcook
+- 最新提交：`0de2d90`
+- 工作区干净
+
+### 启动方式
+
+```bash
+cd "D:\Project\Amazing food\backend" && node src/index.js
+# 食客端: http://localhost:7777
+# 饲养员端: http://localhost:9999
+```
