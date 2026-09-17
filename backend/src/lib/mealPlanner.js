@@ -153,10 +153,10 @@ async function generateWeeklyPlan(opts = {}) {
     return r;
   };
 
-  /** 组一餐：保证荤+素，有主食/汤则加 */
+  /** 组一餐：三菜一汤（3 道菜 + 1 道汤） */
   const buildMeal = (mealType) => {
     const ids = [];
-    // 荤：避开昨天同蛋白，且只选有蛋白的菜（LOW #3）
+    // 菜1：荤菜（避开昨天同蛋白，只选有蛋白的）
     const meatWithProtein = meatPool.filter(r => proteinSource(r) !== null);
     const meatCandidates = meatWithProtein.filter(r => proteinSource(r) !== lastProtein[mealType]);
     const meat = pickWeighted(meatCandidates.length ? meatCandidates : meatWithProtein, used, rng);
@@ -167,8 +167,7 @@ async function generateWeeklyPlan(opts = {}) {
       ids.push(meat.id);
       lastProtein[mealType] = proteinSource(meat);
     }
-    // 素：优先 vegPool，取完回退 otherPool 中有蛋白的菜（LOW #3）
-    // 不回退到无蛋白的 otherPool 项，避免"素"位选到无蛋白菜导致整餐缺蛋白
+    // 菜2：素菜（优先 vegPool，回退 otherPool 有蛋白的）
     const veg = take(vegPool) || (() => {
       const withProtein = otherPool.filter(r => proteinSource(r) !== null);
       const r = pickWeighted(withProtein, used, rng);
@@ -180,16 +179,18 @@ async function generateWeeklyPlan(opts = {}) {
       return r;
     })();
     if (veg) ids.push(veg.id);
-    // 主食（60% 概率）
-    if (rng() < 0.6) {
-      const staple = take(staplePool);
-      if (staple) ids.push(staple.id);
+    // 菜3：荤素混合（从剩余池加权随机）
+    const mixPool = [...meatPool, ...vegPool, ...otherPool].filter(r => !used.has(r.id));
+    const mix = pickWeighted(mixPool, used, rng);
+    if (mix) {
+      used.add(mix.id);
+      totalPicked++;
+      if (mix._matchScore > 0) matchedPicked++;
+      ids.push(mix.id);
     }
-    // 汤（30% 概率）
-    if (rng() < 0.3) {
-      const soup = take(soupPool);
-      if (soup) ids.push(soup.id);
-    }
+    // 汤：必选
+    const soup = take(soupPool);
+    if (soup) ids.push(soup.id);
     return ids;
   };
 

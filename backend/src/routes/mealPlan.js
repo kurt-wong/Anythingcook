@@ -80,4 +80,57 @@ router.put('/meal-plan', asyncHandler(async (req, res) => {
   return ok(res, { data: plan, message: '周计划已保存' });
 }));
 
+/**
+ * 向指定天/餐添加一道菜（食客可修改食谱）
+ * body: { day: "mon", meal: "lunch", recipeId: "xxx" }
+ */
+router.post('/meal-plan/dish', asyncHandler(async (req, res) => {
+  const { day, meal, recipeId } = req.body || {};
+  if (!DAY_KEYS.includes(day)) return fail(res, 400, '无效的日期');
+  if (!MEAL_TYPES.includes(meal)) return fail(res, 400, '无效的餐次');
+  if (!recipeId || typeof recipeId !== 'string') return fail(res, 400, '请提供 recipeId');
+
+  const weekStart = getWeekStart();
+  let plan = null;
+  if (await fs.pathExists(FILES.mealPlan)) {
+    plan = await readJson(FILES.mealPlan, null);
+  }
+  if (!plan || plan.weekStart !== weekStart || !plan.days) {
+    plan = emptyWeekPlan(weekStart);
+  }
+  if (!Array.isArray(plan.days[day][meal])) {
+    plan.days[day][meal] = [];
+  }
+  if (!plan.days[day][meal].includes(recipeId)) {
+    plan.days[day][meal].push(recipeId);
+  }
+  await writeJson(FILES.mealPlan, plan);
+  return ok(res, { data: plan, message: '已添加菜品' });
+}));
+
+/**
+ * 从指定天/餐移除一道菜
+ * body: { day: "mon", meal: "lunch", recipeId: "xxx" }
+ */
+router.delete('/meal-plan/dish', asyncHandler(async (req, res) => {
+  const { day, meal, recipeId } = req.body || {};
+  if (!DAY_KEYS.includes(day)) return fail(res, 400, '无效的日期');
+  if (!MEAL_TYPES.includes(meal)) return fail(res, 400, '无效的餐次');
+  if (!recipeId) return fail(res, 400, '请提供 recipeId');
+
+  const weekStart = getWeekStart();
+  let plan = null;
+  if (await fs.pathExists(FILES.mealPlan)) {
+    plan = await readJson(FILES.mealPlan, null);
+  }
+  if (!plan || plan.weekStart !== weekStart || !plan.days) {
+    return fail(res, 404, '本周暂无计划');
+  }
+  if (Array.isArray(plan.days[day]?.[meal])) {
+    plan.days[day][meal] = plan.days[day][meal].filter(id => id !== recipeId);
+  }
+  await writeJson(FILES.mealPlan, plan);
+  return ok(res, { data: plan, message: '已移除菜品' });
+}));
+
 module.exports = router;

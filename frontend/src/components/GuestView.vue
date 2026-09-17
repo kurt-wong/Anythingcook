@@ -74,23 +74,110 @@
         </div>
       </section>
 
-      <!-- 本周计划摘要 -->
-      <section v-if="todayPlan.length > 0" class="bg-primary/5 border-b border-divider-soft">
-        <div class="max-w-6xl mx-auto px-lg py-sm flex items-center justify-between gap-sm">
-          <div class="flex items-center gap-sm min-w-0">
-            <span class="text-caption font-body text-ink-muted-80 flex-shrink-0">今日计划：</span>
-            <span class="text-caption font-body text-ink truncate">
-              {{ todayPlan.map(r => r.name).join('、') }}
-            </span>
+      <!-- 今日/明日食谱面板 -->
+      <section v-if="twoDayPlan.length > 0" class="bg-primary/5 border-b border-divider-soft">
+        <div class="max-w-6xl mx-auto px-lg py-md">
+          <div class="flex items-center justify-between mb-sm">
+            <span class="font-body text-body-strong text-ink">今明食谱</span>
+            <button
+              @click="addTodayPlanToCart"
+              class="btn-pearl-capsule text-caption apple-interaction"
+            >
+              一键点今日菜
+            </button>
           </div>
-          <button
-            @click="addTodayPlanToCart"
-            class="btn-pearl-capsule text-caption apple-interaction flex-shrink-0"
-          >
-            一键点菜
-          </button>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <div
+              v-for="dayInfo in twoDayPlan"
+              :key="dayInfo.dayKey"
+              class="bg-canvas rounded-lg border border-divider-soft p-md"
+            >
+              <div class="font-body text-caption-strong text-ink mb-sm">
+                {{ dayInfo.label }}{{ dayInfo.isToday ? '（今天）' : '' }}
+              </div>
+              <div v-for="meal in dayInfo.meals" :key="meal.key" class="mb-sm">
+                <div class="flex items-center justify-between mb-xs">
+                  <span class="font-body text-micro-legal text-ink-muted-48">{{ meal.label }}</span>
+                  <button
+                    @click="openGuestPicker(dayInfo.dayKey, meal.key)"
+                    class="text-micro-legal text-primary hover:underline"
+                  >
+                    + 加菜
+                  </button>
+                </div>
+                <div v-if="meal.dishes.length === 0" class="text-micro-legal text-ink-muted-48 px-xs">
+                  暂无
+                </div>
+                <div v-else class="flex flex-wrap gap-xs">
+                  <span
+                    v-for="dish in meal.dishes"
+                    :key="dish.id"
+                    class="inline-flex items-center gap-xs bg-canvas-parchment px-sm py-[2px] rounded-full"
+                  >
+                    <span
+                      v-if="getRecipeScore(dish.id) > 0"
+                      class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"
+                      title="有库存"
+                    ></span>
+                    <span class="font-body text-micro-legal text-ink">{{ dish.name }}</span>
+                    <button
+                      @click="removeDishFromPlan(dayInfo.dayKey, meal.key, dish.id)"
+                      class="text-ink-muted-48 hover:text-red-500 text-micro-legal leading-none"
+                      title="移除"
+                    >×</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
+
+      <!-- 食客选菜弹窗 -->
+      <transition name="modal">
+        <div
+          v-if="guestPicker.open"
+          class="fixed inset-0 z-[65] flex items-center justify-center p-lg"
+          @click.self="guestPicker.open = false"
+        >
+          <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+          <div class="relative bg-canvas rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+            <div class="p-lg border-b border-divider-soft">
+              <h3 class="font-display text-body-strong text-ink">选择菜品</h3>
+              <input
+                v-model="guestPicker.search"
+                type="text"
+                placeholder="搜索菜品..."
+                class="w-full search-input mt-sm"
+              />
+            </div>
+            <div class="flex-1 overflow-y-auto p-lg">
+              <div class="flex flex-wrap gap-sm">
+                <button
+                  v-for="recipe in guestPickerRecipes"
+                  :key="recipe.id"
+                  @click="addDishToPlan(recipe.id)"
+                  class="px-md py-xs rounded-full bg-canvas-parchment font-body text-caption text-ink hover:bg-primary hover:text-white transition-colors apple-interaction"
+                >
+                  <span
+                    v-if="getRecipeScore(recipe.id) > 0"
+                    class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-xs"
+                  ></span>
+                  {{ recipe.name }}
+                </button>
+              </div>
+              <div v-if="guestPickerRecipes.length === 0" class="text-center py-xl">
+                <p class="font-body text-caption text-ink-muted-48">没有匹配的菜品</p>
+              </div>
+            </div>
+            <div class="p-md border-t border-divider-soft text-right">
+              <button @click="guestPicker.open = false" class="btn-pearl-capsule text-caption apple-interaction">
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
 
       <!-- 菜谱九宫格 -->
       <section class="product-tile-light">
@@ -357,18 +444,48 @@ const filteredRecipes = computed(() => {
 
 // 今日（周几）计划中的菜谱对象
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
-const todayPlan = computed(() => {
+const DAY_LABELS = { mon:'周一', tue:'周二', wed:'周三', thu:'周四', fri:'周五', sat:'周六', sun:'周日' }
+const MEAL_TYPES = [
+  { key: 'breakfast', label: '早餐' },
+  { key: 'lunch', label: '午餐' },
+  { key: 'dinner', label: '晚餐' },
+  { key: 'snack', label: '加餐' },
+]
+
+// 今日+明日食谱（分餐次展示）
+const twoDayPlan = computed(() => {
   if (!mealPlan.value) return []
-  const dayKey = DAY_KEYS[new Date().getDay()]
-  const day = mealPlan.value.days?.[dayKey]
-  if (!day) return []
-  const ids = [
-    ...(day.breakfast || []),
-    ...(day.lunch || []),
-    ...(day.dinner || []),
-    ...(day.snack || [])
-  ]
-  return ids.map(id => recipes.value.find(r => r.id === id)).filter(Boolean)
+  const today = new Date()
+  const todayIdx = today.getDay()
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowIdx = tomorrow.getDay()
+
+  const result = []
+  for (const [idx, isToday] of [[todayIdx, true], [tomorrowIdx, false]]) {
+    const dayKey = DAY_KEYS[idx]
+    const day = mealPlan.value.days?.[dayKey]
+    if (!day) continue
+    const meals = MEAL_TYPES.map(mt => ({
+      key: mt.key,
+      label: mt.label,
+      dishes: (day[mt.key] || [])
+        .map(id => recipes.value.find(r => r.id === id))
+        .filter(Boolean),
+    }))
+    // 只显示有菜品的天
+    if (meals.some(m => m.dishes.length > 0)) {
+      result.push({ dayKey, label: DAY_LABELS[dayKey] || dayKey, isToday, meals })
+    }
+  }
+  return result
+})
+
+// 今日全部菜品（一键点菜用）
+const todayPlan = computed(() => {
+  const info = twoDayPlan.value.find(d => d.isToday)
+  if (!info) return []
+  return info.meals.flatMap(m => m.dishes)
 })
 
 // 一键把今日计划加入购物车
@@ -376,6 +493,56 @@ const addTodayPlanToCart = () => {
   if (todayPlan.value.length === 0) return
   todayPlan.value.forEach(recipe => addToCart(recipe, false))
   showToast(`已按今日计划加入 ${todayPlan.value.length} 道菜`)
+}
+
+// 食客选菜弹窗
+const guestPicker = ref({ open: false, day: '', meal: '', search: '' })
+
+const guestPickerRecipes = computed(() => {
+  let list = recipes.value
+  const q = guestPicker.value.search.toLowerCase()
+  if (q) {
+    list = list.filter(r => r.name.toLowerCase().includes(q))
+  }
+  // 库存优先排序
+  const scoreMap = {}
+  recommendations.value.forEach(r => { scoreMap[r.id] = r.score })
+  return [...list]
+    .sort((a, b) => (scoreMap[b.id] || 0) - (scoreMap[a.id] || 0))
+    .slice(0, 100)
+})
+
+const openGuestPicker = (day, meal) => {
+  guestPicker.value = { open: true, day, meal, search: '' }
+}
+
+// 向计划添加一道菜
+const addDishToPlan = async (recipeId) => {
+  try {
+    const { day, meal } = guestPicker.value
+    const response = await axios.post('/api/meal-plan/dish', { day, meal, recipeId })
+    if (response.data.success) {
+      mealPlan.value = response.data.data
+      showToast('已添加')
+    }
+  } catch (error) {
+    console.error('添加菜品失败:', error)
+    showToast('添加失败', 'warning')
+  }
+}
+
+// 从计划移除一道菜
+const removeDishFromPlan = async (day, meal, recipeId) => {
+  try {
+    const response = await axios.delete('/api/meal-plan/dish', { data: { day, meal, recipeId } })
+    if (response.data.success) {
+      mealPlan.value = response.data.data
+      showToast('已移除')
+    }
+  } catch (error) {
+    console.error('移除菜品失败:', error)
+    showToast('移除失败', 'warning')
+  }
 }
 
 // 随机推荐：优先库存能做的菜
@@ -463,10 +630,10 @@ const retryFetch = () => {
   fetchMealPlan()
 }
 
-// 获取推荐
+// 获取推荐（count=100 让库存优先排序覆盖更多菜谱）
 const fetchRecommendations = async () => {
   try {
-    const response = await axios.get('/api/recipes/recommend?count=8')
+    const response = await axios.get('/api/recipes/recommend?count=100')
     if (response.data.success) recommendations.value = response.data.data
   } catch (error) {
     console.error('获取推荐失败:', error)
@@ -591,5 +758,20 @@ onMounted(() => {
 @keyframes slide-down {
   from { transform: translateY(0); }
   to { transform: translateY(100%); }
+}
+
+.modal-enter-active {
+  animation: modal-in 0.3s ease-out;
+}
+.modal-leave-active {
+  animation: modal-out 0.2s ease-in;
+}
+@keyframes modal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 </style>
