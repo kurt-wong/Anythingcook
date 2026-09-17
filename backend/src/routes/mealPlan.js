@@ -20,8 +20,8 @@ function emptyWeekPlan(weekStart) {
 }
 
 /**
- * 获取当周计划（无则返回空模板）
- * H2：getWeekStart 现返回本地时区的本周一
+ * 获取当周计划
+ * 本周无计划时，根据库存自动生成并保存（三菜一汤，库存优先）
  */
 router.get('/meal-plan', asyncHandler(async (req, res) => {
   const weekStart = getWeekStart();
@@ -41,7 +41,11 @@ router.get('/meal-plan', asyncHandler(async (req, res) => {
       return ok(res, { data: plan });
     }
   }
-  return ok(res, { data: emptyWeekPlan(weekStart) });
+  // 本周无计划：根据库存自动生成并保存
+  console.log('本周暂无计划，根据库存自动生成...');
+  const plan = await generateWeeklyPlan();
+  await writeJson(FILES.mealPlan, plan);
+  return ok(res, { data: plan, message: `已根据库存自动生成本周食谱，匹配率 ${plan.summary.stockMatchRate}%` });
 }));
 
 /**
