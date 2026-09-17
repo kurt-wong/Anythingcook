@@ -1,6 +1,7 @@
 /**
- * Amazing Food 后端入口 —— 仅负责装配。
- * 业务逻辑在 routes/，通用设施在 lib/。
+ * Amazing Food 后端入口 —— 双端口。
+ * 7777：食客点菜端（API + guest.html）
+ * 9999：饲养员管理端（API + cook.html）
  */
 require('dotenv').config();
 const express = require('express');
@@ -13,42 +14,50 @@ const { DIRS, FILES, readJson } = require('./lib/store');
 const { errorHandler } = require('./lib/respond');
 const { cacheRecipeImages, downloadCachedImagesToLocal } = require('./lib/imageCache');
 
-const app = express();
-const PORT = process.env.PORT || 7777;
+const GUEST_PORT = process.env.PORT || 7777;
+const COOK_PORT = process.env.COOK_PORT || 9999;
 
-// 中间件
-app.use(cors());
-app.use(compression()); // gzip 压缩
-app.use(express.json());
+function createApp(entryHtml) {
+  const app = express();
 
-// 静态文件服务（前端构建文件）
-app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+  app.use(cors());
+  app.use(compression());
+  app.use(express.json());
 
-// 本地菜谱图片服务
-app.use('/api/local-image', express.static(DIRS.images));
+  // 本地菜谱图片服务
+  app.use('/api/local-image', express.static(DIRS.images));
 
-// API 路由
-app.use('/api', require('./routes/recipes'));
-app.use('/api', require('./routes/ingredients'));
-app.use('/api', require('./routes/orders'));
-app.use('/api', require('./routes/mealPlan'));
-app.use('/api', require('./routes/dietLog'));
-app.use('/api', require('./routes/tips'));
-app.use('/api', require('./routes/stats'));
-app.use('/api', require('./routes/admin'));
-app.use('/api', require('./routes/images'));
+  // API 路由
+  app.use('/api', require('./routes/recipes'));
+  app.use('/api', require('./routes/ingredients'));
+  app.use('/api', require('./routes/orders'));
+  app.use('/api', require('./routes/mealPlan'));
+  app.use('/api', require('./routes/dietLog'));
+  app.use('/api', require('./routes/tips'));
+  app.use('/api', require('./routes/stats'));
+  app.use('/api', require('./routes/admin'));
+  app.use('/api', require('./routes/images'));
 
-// 统一错误处理（async 路由异常 -> 500）
-app.use(errorHandler);
+  app.use(errorHandler);
 
-// 前端路由回退
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
-});
+  // 静态资源（JS/CSS/图片），但不自动找 index.html
+  app.use(express.static(path.join(__dirname, '../../frontend/dist'), { index: false }));
+
+  // 所有非 API 请求回退到对应入口 HTML
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../frontend/dist', entryHtml));
+  });
+
+  return app;
+}
+
+// 食客端：7777
+const guestApp = createApp('guest.html');
+// 饲养员端：9999
+const cookApp = createApp('cook.html');
 
 // ===== 定时任务 =====
 
-// 每天凌晨 2 点双源合并同步数据
 cron.schedule('0 2 * * *', async () => {
   console.log('执行定时数据同步...');
   try {
@@ -60,7 +69,6 @@ cron.schedule('0 2 * * *', async () => {
   }
 });
 
-// 每小时自动缓存菜谱图片（配置了 Unsplash Key 才启用）
 cron.schedule('0 * * * *', async () => {
   if (!process.env.UNSPLASH_ACCESS_KEY) return;
   console.log('执行定时图片缓存（下载到本地）...');
@@ -73,12 +81,17 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
-// 启动服务器
+// 启动双端口
 if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`Amazing Food 服务器运行在 http://0.0.0.0:${PORT}`);
-    console.log(`局域网访问地址: http://[你的IP地址]:${PORT}`);
+  guestApp.listen(GUEST_PORT, '0.0.0.0', () => {
+    console.log(`食客点菜端: http://0.0.0.0:${GUEST_PORT}`);
+  });
+  cookApp.listen(COOK_PORT, '0.0.0.0', () => {
+    console.log(`饲养员管理端: http://0.0.0.0:${COOK_PORT}`);
+  });
 
+  // 首次启动检查数据
+  (async () => {
     try {
       const recipes = await readJson(FILES.recipes, []);
       if (recipes.length === 0) {
@@ -87,10 +100,9 @@ if (require.main === module) {
         await syncRecipes();
       }
     } catch (error) {
-      // L5：首次同步失败不崩溃
       console.error('启动时数据检查失败:', error.message);
     }
-  });
+  })();
 }
 
-module.exports = app;
+module.exports = { guestApp, cookApp };
