@@ -56,12 +56,15 @@ router.get('/ingredients/suggestions', asyncHandler(async (req, res) => {
 }));
 
 /**
- * 获取所有食材及其库存状态（含分类）
+ * 获取所有食材及其库存状态
+ * 从菜谱中提取全部非调味品食材作为默认清单，与当前库存合并
  * 返回: [{ name, count, category }, ...]
  */
 router.get('/ingredients/all', asyncHandler(async (req, res) => {
   const ingredients = await readJson(FILES.ingredients, {});
   const categoryMap = await readJson(FILES.ingredientCategoryMap, {});
+  const { isMainIngredient } = require('../lib/match');
+  const { loadRecipes } = require('../lib/recipesCache');
 
   const ingredientToCategory = {};
   for (const [category, list] of Object.entries(categoryMap)) {
@@ -70,7 +73,22 @@ router.get('/ingredients/all', asyncHandler(async (req, res) => {
     }
   }
 
-  const all = Object.keys(ingredients).map(name => ({
+  // 从菜谱中提取全部非调味品食材
+  const recipes = await loadRecipes();
+  const recipeIngredients = new Set();
+  for (const r of recipes) {
+    for (const s of (r.stuff || [])) {
+      if (await isMainIngredient(s)) {
+        const norm = s.replace(/的用量为.*$/, '').replace(/（[^）]*）/g, '').replace(/\s+/g, '').trim();
+        if (norm) recipeIngredients.add(norm);
+      }
+    }
+  }
+
+  // 合并：菜谱食材 + 库存中已有的键
+  const allNames = new Set([...recipeIngredients, ...Object.keys(ingredients)]);
+
+  const all = [...allNames].map(name => ({
     name,
     count: ingredients[name]?.count || 0,
     category: ingredientToCategory[name] || '其他',
