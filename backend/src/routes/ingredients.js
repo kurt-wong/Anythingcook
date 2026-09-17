@@ -88,16 +88,22 @@ router.get('/ingredients/all', asyncHandler(async (req, res) => {
   // 合并：菜谱食材 + 库存中已有的键
   const allNames = new Set([...recipeIngredients, ...Object.keys(ingredients)]);
 
-  const all = [...allNames].map(name => ({
-    name,
-    count: ingredients[name]?.count || 0,
-    category: ingredientToCategory[name] || '其他',
-  })).sort((a, b) => {
-    if (a.category !== b.category) {
-      return a.category.localeCompare(b.category, 'zh-CN');
-    }
-    return a.name.localeCompare(b.name, 'zh-CN');
-  });
+  // 6 个已知分类全量展示；「其他」只显示已有库存的（count > 0），避免上千项铺开
+  const KNOWN_CATEGORIES = new Set(['肉类', '蔬菜类', '蛋类', '豆制品', '主食类', '水产类']);
+
+  const all = [...allNames]
+    .map(name => ({
+      name,
+      count: ingredients[name]?.count || 0,
+      category: ingredientToCategory[name] || '其他',
+    }))
+    .filter(x => KNOWN_CATEGORIES.has(x.category) || x.count > 0)
+    .sort((a, b) => {
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category, 'zh-CN');
+      }
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
 
   return ok(res, { data: all });
 }));
