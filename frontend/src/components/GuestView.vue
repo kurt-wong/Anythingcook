@@ -76,53 +76,54 @@
 
       <!-- 今日/明日食谱面板 -->
       <section v-if="twoDayPlan.length > 0" class="bg-primary/5 border-b border-divider-soft">
-        <div class="max-w-6xl mx-auto px-lg py-md">
-          <div class="flex items-center justify-between mb-sm">
-            <span class="font-body text-body-strong text-ink">今明食谱</span>
+        <div class="max-w-6xl mx-auto px-lg py-lg">
+          <div class="flex items-center justify-between mb-md">
+            <span class="font-display text-tagline text-ink">今明食谱</span>
             <button
               @click="addTodayPlanToCart"
-              class="btn-pearl-capsule text-caption apple-interaction"
+              class="btn-pearl-capsule text-body apple-interaction"
             >
               一键点今日菜
             </button>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+          <div class="space-y-lg">
             <div
               v-for="dayInfo in twoDayPlan"
               :key="dayInfo.dayKey"
-              class="bg-canvas rounded-lg border border-divider-soft p-md"
+              class="bg-canvas rounded-xl border border-divider-soft p-lg"
             >
-              <div class="font-body text-caption-strong text-ink mb-sm">
-                {{ dayInfo.label }}{{ dayInfo.isToday ? '（今天）' : '' }}
+              <div class="font-display text-body-strong text-ink mb-md flex items-center gap-sm">
+                {{ dayInfo.label }}
+                <span v-if="dayInfo.isToday" class="text-caption font-body text-primary bg-primary/10 px-sm py-[2px] rounded-full">今天</span>
               </div>
-              <div v-for="meal in dayInfo.meals" :key="meal.key" class="mb-sm">
-                <div class="flex items-center justify-between mb-xs">
-                  <span class="font-body text-micro-legal text-ink-muted-48">{{ meal.label }}</span>
+              <div v-for="meal in dayInfo.meals" :key="meal.key" class="mb-md last:mb-0">
+                <div class="flex items-center justify-between mb-sm">
+                  <span class="font-body text-body text-ink-muted-80">{{ meal.label }}</span>
                   <button
                     @click="openGuestPicker(dayInfo.dayKey, meal.key)"
-                    class="text-micro-legal text-primary hover:underline"
+                    class="text-caption text-primary hover:underline apple-interaction"
                   >
                     + 加菜
                   </button>
                 </div>
-                <div v-if="meal.dishes.length === 0" class="text-micro-legal text-ink-muted-48 px-xs">
+                <div v-if="meal.dishes.length === 0" class="text-caption text-ink-muted-48 px-sm">
                   暂无
                 </div>
-                <div v-else class="flex flex-wrap gap-xs">
+                <div v-else class="flex flex-wrap gap-sm">
                   <span
                     v-for="dish in meal.dishes"
                     :key="dish.id"
-                    class="inline-flex items-center gap-xs bg-canvas-parchment px-sm py-[2px] rounded-full"
+                    class="inline-flex items-center gap-sm bg-canvas-parchment px-md py-xs rounded-full"
                   >
                     <span
                       v-if="getRecipeScore(dish.id) > 0"
-                      class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"
+                      class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"
                       title="有库存"
                     ></span>
-                    <span class="font-body text-micro-legal text-ink">{{ dish.name }}</span>
+                    <span class="font-body text-body text-ink">{{ dish.name }}</span>
                     <button
                       @click="removeDishFromPlan(dayInfo.dayKey, meal.key, dish.id)"
-                      class="text-ink-muted-48 hover:text-red-500 text-micro-legal leading-none"
+                      class="text-ink-muted-48 hover:text-red-500 text-body leading-none w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-50"
                       title="移除"
                     >×</button>
                   </span>
