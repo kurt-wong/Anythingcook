@@ -90,9 +90,10 @@ import TipsView from './components/TipsView.vue'
 const ROLE_KEY = 'af-role'
 const NAME_KEY = 'af-guest-name'
 
-// 恢复上次选择的角色
-const currentRole = ref(localStorage.getItem(ROLE_KEY) || null)
-const guestName = ref(localStorage.getItem(NAME_KEY) || '')
+// 恢复上次选择的角色（只恢复 guest，cook 每次需手动选择）
+const savedRole = localStorage.getItem(ROLE_KEY)
+const currentRole = ref(savedRole === 'guest' ? 'guest' : null)
+const guestName = ref(currentRole.value === 'guest' ? (localStorage.getItem(NAME_KEY) || '') : '')
 const showTips = ref(false)
 
 const selectRole = (role, name = '') => {
